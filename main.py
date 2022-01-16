@@ -34,6 +34,10 @@ my_args.add_argument(
 )
 
 my_args.add_argument(
+    "-s", "--sheet-name", metavar="sheet", type=str, nargs="*", help="Sheet name to read from xlsx", required=False
+)
+
+my_args.add_argument(
     "-o", "--output", metavar="out", type=str, help="Output file name", required=True
 )
 
@@ -42,6 +46,10 @@ args = my_args.parse_args()
 if not args.output.endswith(".csv"):
     print("Output file needs to be a csv file")
     exit()
+if pathlib.Path(args.file).suffix == ".xlsx":
+    if not args.sheet_name:
+        print("Sheet name is required for xlsx file")
+        exit()
 
 
 class Term:
@@ -130,8 +138,9 @@ def read_file(file):
             terms = [line.split("\t")[0] for line in file]
             return terms
     elif file_extension == ".xlsx":
-        file = pd.read_excel(args.file, sheet_name="1_positive tone")
-        return file.iloc[:, 0].values
+        file = pd.read_excel(args.file, sheet_name=" ".join(args.sheet_name))
+        file = file.iloc[:, 0].dropna()
+        return file
     else:
         print("Invalid input file type. Must be .txt, .csv or .xlsx")
 
