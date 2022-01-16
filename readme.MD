@@ -9,7 +9,16 @@ Gets tweet for a given term and returns the tweet if the given term is considere
 - openpyxl~=3.0.9
 
 ## Usage
-Clone the repo and install requirements using pip install -r requirements.txt. To run use python main.py -f filename_with_terms 
+Clone the repo and install requirements using pip install -r requirements.txt. Create a .env file with the following:
+
+- CONSUMER_KEY
+- CONSUMER_SECRET
+- ACCESS_TOKEN
+- ACCESS_TOKEN_SECRET
+
+corresponding to your Twitter API authentication. 
+
+To run use python main.py -f filename_with_terms 
 -o filename_to_output to [-s sheet_name] like so:
 
 python main.py -f en.xlsx -o terms.csv -s 1_positive tone
