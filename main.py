@@ -54,7 +54,7 @@ if pathlib.Path(args.file).suffix == ".xlsx":
 
 class Term:
 
-    def __init__(self, term, language="en", n_tweets=1) -> None:
+    def __init__(self, term: str, language: str = "en", n_tweets: int = 1) -> None:
         self.term = term
         self.language = language
         self.tweets = self.twitter_search(n_tweets=n_tweets)
@@ -66,7 +66,7 @@ class Term:
         """
         return f"{self.term}"
 
-    def umigon_search(self, context) -> Union[str, None]:
+    def umigon_search(self, context: str) -> Union[str, None]:
         """
         Query's the Umigon webservice for a given term and returns the sentiment for a given context
         :param context: Context of the term e.g a tweet
@@ -81,7 +81,7 @@ class Term:
         else:
             return None
 
-    def twitter_search(self, n_tweets) -> None:
+    def twitter_search(self, n_tweets: int) -> None:
         """
         Searches twitter for a given term and saves the amount of tweets specified in n_tweets to a csv file.
         By default appends ("a"), but can be overriden to write ("w) with the "mode" parameter
@@ -120,7 +120,7 @@ class Term:
 
         return df[["term", "id", "full_text"]]
 
-    def to_csv(self, mode="a") -> None:
+    def to_csv(self, mode: str = "a") -> None:
         """
         Saves tweets for a given term to a csv file
         :param mode: a for append / w for overwrite
@@ -130,22 +130,33 @@ class Term:
 
 
 # Read and open a csv, text or xlsx file
-def read_file(file):
+def read_file(file: str) -> pd.DataFrame:
+    """
+    Reads a .txt, .csv or .xslx file with a list of terms and returns a dataframe containing all the terms.
+    Terms must be in the first column. For .txt files "\t" separator is assumed. For csv files pandas will try
+    to autodetect separaotr
+    :param file: Filename to read
+    :return: pd.Pataframe Dataframe containing terms
+    """
     file_extension = pathlib.Path(file).suffix
     if file_extension == ".csv" or file_extension == ".txt":
-        file = read_file(args.file)
-        with open(file, 'r') as f:
-            terms = [line.split("\t")[0] for line in file]
-            return terms
+        if file_extension == ".txt":
+            file = pd.read_csv(file, sep="\t")
+        else:
+            file = pd.read_csv(file)
     elif file_extension == ".xlsx":
         file = pd.read_excel(args.file, sheet_name=" ".join(args.sheet_name))
-        file = file.iloc[:, 0].dropna()
-        return file
     else:
         print("Invalid input file type. Must be .txt, .csv or .xlsx")
+    file = file.iloc[:, 0].dropna()
+    return file
 
 
-def main():
+def main() -> None:
+    """
+    Reads a file containing a list of terms and writes tweets containing those terms to a csv file.
+    :return: None
+    """
     # Check if file argument provided with CLI and read file content if True
     if args.file:
         terms_list = read_file(args.file)
