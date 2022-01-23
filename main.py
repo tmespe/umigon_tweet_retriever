@@ -8,6 +8,7 @@ import pathlib
 from typing import Union, Any
 
 import requests
+from requests import ConnectionError, HTTPError
 from dotenv import load_dotenv
 from twarc import Twarc2, ensure_flattened
 
@@ -74,13 +75,18 @@ class Term:
         :param language: Language of the term and context
         :return: string
         """
-        r = requests.get(f"{UMIGON_WEBSERVICE}{self.language}", params={"term": self.term, "text": context})
-        # If language, term and context are valid webservice will return 200
-        if r.status_code == 200:
-            sentiment = r.text
-            return sentiment
-        else:
-            return None
+        try:
+            r = requests.get(f"{UMIGON_WEBSERVICE}{self.language}", params={"term": self.term, "text": context})
+            # If language, term and context are valid webservice will return 200
+            if r.status_code == 200:
+                sentiment = r.text
+                return sentiment
+            else:
+                return None
+        except (ConnectionError, HTTPError):
+            print("Connection error")
+            sleep(60)
+            self.umigon_search(context=context)
 
     def twitter_search(self, n_tweets: int) -> None:
         """
