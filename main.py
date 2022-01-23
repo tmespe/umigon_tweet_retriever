@@ -48,10 +48,9 @@ args = my_args.parse_args()
 if not args.output.endswith(".csv"):
     print("Output file needs to be a csv file")
     exit()
-if pathlib.Path(args.file).suffix == ".xlsx":
-    if not args.sheet_name:
-        print("Sheet name is required for xlsx file")
-        exit()
+if pathlib.Path(args.file).suffix == ".xlsx" and not args.sheet_name:
+    print("Sheet name is required for xlsx file")
+    exit()
 
 
 class Term:
@@ -78,11 +77,7 @@ class Term:
         try:
             r = requests.get(f"{UMIGON_WEBSERVICE}{self.language}", params={"term": self.term, "text": context})
             # If language, term and context are valid webservice will return 200
-            if r.status_code == 200:
-                sentiment = r.text
-                return sentiment
-            else:
-                return None
+            return r.text if r.status_code == 200 else None
         except (ConnectionError, HTTPError):
             print("Connection error")
             sleep(60)
@@ -101,7 +96,7 @@ class Term:
         #               access_token_secret=ACCESS_TOKEN_SECRET)
 
         client = Twarc2(bearer_token=BEARER)
-        
+
         end_time = datetime.utcnow() - timedelta(days=2)
         start_time = end_time - timedelta(days=6)
 
@@ -114,27 +109,25 @@ class Term:
         # else find another tweet
         try_count = 0
         for page in search_results:
-                for tweet in ensure_flattened(page): 
-                    if n_tweets > 0 and try_count < 20:
-                        tweet_text = tweet["text"]
-                            # if not "RT @" in tweet["full_text"] and len(tweet["full_text"]) >= 20:
-                        if len(tweet_text) >= 20 and tweet_text not in df["text"].values:
-                            # Check if term is positive in the tweet using the Umigon webservce
-                            sentiment = self.umigon_search(context=tweet_text)
-                            tweet["term"] = self.term
-                            if sentiment == "positive":
-                                df = df.append(tweet, ignore_index=True)
-                                n_tweets -= 1
-                            else:
-                                try_count += 1  
-                        else:
-                            continue
+            for tweet in ensure_flattened(page): 
+                if n_tweets > 0 and try_count < 20:
+                    tweet_text = tweet["text"]
+                    if len(tweet_text) < 20 or tweet_text in df["text"].values:
+                        continue
+                    # Check if term is positive in the tweet using the Umigon webservce
+                    sentiment = self.umigon_search(context=tweet_text)
+                    tweet["term"] = self.term
+                    if sentiment == "positive":
+                        df = df.append(tweet, ignore_index=True)
+                        n_tweets -= 1
                     else:
-                        if try_count >= 20:
-                            return None
-                            
-                        break
-                break
+                        try_count += 1
+                elif try_count >= 20:
+                    return None
+
+                else:
+                    break
+            break
 
         return df[["term", "id", "text"]]
 
@@ -157,11 +150,10 @@ def read_file(file: str) -> pd.DataFrame:
     :return: pd.Pataframe Dataframe containing terms
     """
     file_extension = pathlib.Path(file).suffix
-    if file_extension == ".csv" or file_extension == ".txt":
-        if file_extension == ".txt":
-            file = pd.read_csv(file, sep="\t")
-        else:
-            file = pd.read_csv(file)
+    if file_extension == ".csv":
+        file = pd.read_csv(file)
+    elif file_extension == ".txt":
+        file = pd.read_csv(file, sep="\t")
     elif file_extension == ".xlsx":
         file = pd.read_excel(args.file, sheet_name=" ".join(args.sheet_name))
     else:
