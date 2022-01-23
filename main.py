@@ -102,7 +102,7 @@ class Term:
         # Initialise dataframe storing term, tweet_id and tweet text
         df = pd.DataFrame(columns=["term", "id", "text"])
         #tweets = client.search(self.term, lang=self.language)
-        search_results = client.search_recent(query=f"{self.term} lang:{self.language}")
+        search_results = client.search_recent(query=f'"{self.term} :)" lang:{self.language}')
 
         # Loop over tweets and check if tweet text is longer than 20 chars and term is positive in context
         # else find another tweet
