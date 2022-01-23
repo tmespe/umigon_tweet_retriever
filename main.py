@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime, timedelta
 import pandas as pd
 import os
 from time import sleep
@@ -8,7 +9,7 @@ from typing import Union, Any
 
 import requests
 from dotenv import load_dotenv
-from twarc import Twarc
+from twarc import Twarc2, ensure_flattened
 
 load_dotenv()
 
@@ -90,35 +91,46 @@ class Term:
         :return: None
         """
         # Connect to twitter API using Twarc
-        client = Twarc(consumer_key=CONSUMER_KEY, consumer_secret=CONSUMER_SECRET, access_token=ACCESS_TOKEN,
-                       access_token_secret=ACCESS_TOKEN_SECRET)
+        #client = Twarc(consumer_key=CONSUMER_KEY, consumer_secret=CONSUMER_SECRET, access_token=ACCESS_TOKEN,
+        #               access_token_secret=ACCESS_TOKEN_SECRET)
 
-        # end_time = datetime.utcnow()
-        # start_time = end_time - timedelta(days=6)
+        client = Twarc2(bearer_token=BEARER)
+        
+        end_time = datetime.utcnow() - timedelta(days=2)
+        start_time = end_time - timedelta(days=6)
 
         # Initialise dataframe storing term, tweet_id and tweet text
-        df = pd.DataFrame(columns=["term", "id", "full_text"])
-        tweets = client.search(self.term, lang=self.language)
+        df = pd.DataFrame(columns=["term", "id", "text"])
+        #tweets = client.search(self.term, lang=self.language)
+        search_results = client.search_recent(query=f"{self.term} lang:{self.language}")
 
         # Loop over tweets and check if tweet text is longer than 20 chars and term is positive in context
         # else find another tweet
-        for tweet in tweets:
-            tweet_text = tweet["full_text"]
-            if n_tweets > 0:
-                # if not "RT @" in tweet["full_text"] and len(tweet["full_text"]) >= 20:
-                if len(tweet_text) >= 20 and tweet_text not in df["full_text"].values:
-                    # Check if term is positive in the tweet using the Umigon webservce
-                    sentiment = self.umigon_search(context=tweet_text)
-                    tweet["term"] = self.term
-                    if sentiment == "positive":
-                        df = df.append(tweet, ignore_index=True)
-                        n_tweets -= 1
-                else:
-                    continue
-            else:
+        try_count = 0
+        for page in search_results:
+                for tweet in ensure_flattened(page): 
+                    if n_tweets > 0 and try_count < 20:
+                        tweet_text = tweet["text"]
+                            # if not "RT @" in tweet["full_text"] and len(tweet["full_text"]) >= 20:
+                        if len(tweet_text) >= 20 and tweet_text not in df["text"].values:
+                            # Check if term is positive in the tweet using the Umigon webservce
+                            sentiment = self.umigon_search(context=tweet_text)
+                            tweet["term"] = self.term
+                            if sentiment == "positive":
+                                df = df.append(tweet, ignore_index=True)
+                                n_tweets -= 1
+                            else:
+                                try_count += 1  
+                        else:
+                            continue
+                    else:
+                        if try_count >= 20:
+                            return None
+                            
+                        break
                 break
 
-        return df[["term", "id", "full_text"]]
+        return df[["term", "id", "text"]]
 
     def to_csv(self, mode: str = "a") -> None:
         """
@@ -151,6 +163,20 @@ def read_file(file: str) -> pd.DataFrame:
     file = file.iloc[:, 0].dropna()
     return file
 
+def parse_terms(terms_list):
+    timeouts = []
+    for term in terms_list:
+        parsed_term = Term(term)
+        if parsed_term.tweets is not None:
+            #print(f"Writing {term} to csv")
+            parsed_term.to_csv()
+            print(f"Finished writing {term} to file")
+        else:
+            timeouts.append(term)
+            print(f"{term} timed out. Will retry later")
+    return timeouts
+
+
 
 def main() -> None:
     """
@@ -161,13 +187,15 @@ def main() -> None:
     if args.file:
         terms_list = read_file(args.file)
         # Loop over terms in file and save term, tweet_id and tweet text to csv file
-        for term in terms_list:
-            Term(term).to_csv()
-            print(f"Finished writing {term} to file")
-            sleep(2)
+        timeouts = parse_terms(terms_list)
+            #sleep(2)
+        while len(timeouts) > 0:
+            parse_terms(timeouts)
+
     elif args.term:
         print(Term(args.term))
 
 
 if __name__ == '__main__':
     main()
+
