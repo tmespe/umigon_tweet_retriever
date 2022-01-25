@@ -188,7 +188,7 @@ def main() -> None:
         timeouts = parse_terms(terms_list)
             #sleep(2)
         while len(timeouts) > 0:
-            parse_terms(timeouts)
+            timeouts = parse_terms(timeouts)
 
     elif args.term:
         print(Term(args.term))
