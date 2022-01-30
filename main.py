@@ -58,7 +58,7 @@ class Term:
     def __init__(self, term: str, language: str = "en", n_tweets: int = 1) -> None:
         self.term = term
         self.language = language
-        self.tweets = self.twitter_search(n_tweets=n_tweets)
+        self.twitter_search(n_tweets=n_tweets)
 
     def __repr__(self) -> str:
         """
@@ -67,9 +67,11 @@ class Term:
         """
         return f"{self.term}"
 
-    def umigon_search(self, context: str) -> Union[str, None]:
+    def umigon_search(self, context: str, sentiment: str = "positive") -> Union[str, None]:
         """
-        Query's the Umigon webservice for a given term and returns the sentiment for a given context
+        Query's the Umigon webservice for a given term, context and sentiment and returns if the term is considered to be
+        of the given sentiment in the given context.
+        :param sentiment: Sentiment to evaluate against
         :param context: Context of the term e.g a tweet
         :param language: Language of the term and context
         :return: string
@@ -77,7 +79,7 @@ class Term:
         try:
             r = requests.get(f"{UMIGON_WEBSERVICE}{self.language}", params={"term": self.term, "text": context})
             # If language, term and context are valid webservice will return 200
-            return r.text if r.status_code == 200 else None
+            return r.text == sentiment if r.status_code == 200 else None
         except (ConnectionError, HTTPError):
             print("Connection error")
             sleep(60)
@@ -92,7 +94,7 @@ class Term:
         :return: None
         """
         # Connect to twitter API using Twarc
-        #client = Twarc(consumer_key=CONSUMER_KEY, consumer_secret=CONSUMER_SECRET, access_token=ACCESS_TOKEN,
+        # client = Twarc(consumer_key=CONSUMER_KEY, consumer_secret=CONSUMER_SECRET, access_token=ACCESS_TOKEN,
         #               access_token_secret=ACCESS_TOKEN_SECRET)
 
         client = Twarc2(bearer_token=BEARER)
@@ -102,22 +104,20 @@ class Term:
 
         # Initialise dataframe storing term, tweet_id and tweet text
         df = pd.DataFrame(columns=["term", "id", "text"])
-        #tweets = client.search(self.term, lang=self.language)
-        search_results = client.search_recent(query=f'"{self.term} :)" lang:{self.language}')
+        search_results = client.search_recent(query=f'"{self.term} :)" lang:{self.language}', max_results=20)
 
         # Loop over tweets and check if tweet text is longer than 20 chars and term is positive in context
         # else find another tweet
         try_count = 0
         for page in search_results:
-            for tweet in ensure_flattened(page): 
+            for tweet in ensure_flattened(page):
                 if n_tweets > 0 and try_count < 20:
                     tweet_text = tweet["text"]
                     if len(tweet_text) < 20 or tweet_text in df["text"].values:
                         continue
                     # Check if term is positive in the tweet using the Umigon webservce
-                    sentiment = self.umigon_search(context=tweet_text)
-                    tweet["term"] = self.term
-                    if sentiment == "positive":
+                    if self.umigon_search(context=tweet_text):
+                        tweet["term"] = self.term
                         df = df.append(tweet, ignore_index=True)
                         n_tweets -= 1
                     else:
@@ -131,13 +131,14 @@ class Term:
 
         return df[["term", "id", "text"]]
 
-    def to_csv(self, mode: str = "a") -> None:
+    def to_csv(self, out: str = args.output, mode: str = "a") -> None:
         """
         Saves tweets for a given term to a csv file
+        :param out: Name of output file
         :param mode: a for append / w for overwrite
         :return: None
         """
-        self.tweets.to_csv(args.output, mode=mode, header=False, index=False, encoding="UTF-8")
+        self.tweets.to_csv(out, mode=mode, header=False, index=False, encoding="UTF-8")
 
 
 # Read and open a csv, text or xlsx file
@@ -161,19 +162,25 @@ def read_file(file: str) -> pd.DataFrame:
     file = file.iloc[:, 0].dropna()
     return file
 
-def parse_terms(terms_list):
+
+def parse_terms(terms_list: list) -> list[Term]:
+    """
+    Parses a list of terms and checks if the sentiment is positive via the Umigon webservice. If the term is positive
+    writes a csv file with all positive terms. Terms that are not parsed are returned for further processing.
+    :param terms_list: List of terms to parse
+    :return: list of Term objects
+    """
     timeouts = []
     for term in terms_list:
         parsed_term = Term(term)
         if parsed_term.tweets is not None:
-            #print(f"Writing {term} to csv")
+            # print(f"Writing {term} to csv")
             parsed_term.to_csv()
             print(f"Finished writing {term} to file")
         else:
             timeouts.append(term)
             print(f"{term} timed out. Will retry later")
     return timeouts
-
 
 
 def main() -> None:
@@ -186,14 +193,17 @@ def main() -> None:
         terms_list = read_file(args.file)
         # Loop over terms in file and save term, tweet_id and tweet text to csv file
         timeouts = parse_terms(terms_list)
-            #sleep(2)
-        while len(timeouts) > 0:
+        retry = 10
+        # Check if there are terms that were not parsed in timeout and loop over them. Limit to 10 tries
+        # to not use up Twitter API quota
+        while len(timeouts) > 0 and retry > 0:
             timeouts = parse_terms(timeouts)
-
+            retry -= 1
+        # Write terms that failed to a file for further follow up
+        [term.to_csv("failed_terms.csv") for term in timeouts]
     elif args.term:
         print(Term(args.term))
 
 
 if __name__ == '__main__':
     main()
-
