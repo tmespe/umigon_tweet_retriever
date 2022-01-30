@@ -18,7 +18,7 @@ Clone the repo and install requirements using pip install -r requirements.txt. C
 
 or if using twarcv2 with Twitters API v2
 
-- BEARER=yourkey
+- BEARER_TOKEN=yourkey
 
 corresponding to your Twitter API authentication. 
 
